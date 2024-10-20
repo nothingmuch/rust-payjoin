@@ -308,8 +308,6 @@ mod test {
     #[test]
     fn message_a_round_trip() {
         let mut plaintext = "foo".as_bytes().to_vec();
-        plaintext.resize(PADDED_PLAINTEXT_A_LENGTH, 0);
-        plaintext[PADDED_PLAINTEXT_A_LENGTH - 1] = 42;
 
         let reply_keypair = HpkeKeyPair::gen_keypair();
         let receiver_keypair = HpkeKeyPair::gen_keypair();
@@ -320,8 +318,25 @@ mod test {
             receiver_keypair.public_key(),
         )
         .expect("encryption should work");
-
         assert_eq!(message_a.len(), PADDED_MESSAGE_BYTES);
+
+        let decrypted = decrypt_message_a(&message_a, receiver_keypair.secret_key().clone())
+            .expect("decryption should work");
+
+        assert_eq!(decrypted.0.len(), PADDED_PLAINTEXT_A_LENGTH);
+
+        // decrypted plaintext is padded, so pad the expected plaintext
+        plaintext.resize(PADDED_PLAINTEXT_A_LENGTH, 0);
+        assert_eq!(decrypted, (plaintext.to_vec(), reply_keypair.public_key().clone()));
+
+        // ensure full plaintext round trips
+        plaintext[PADDED_PLAINTEXT_A_LENGTH - 1] = 42;
+        let message_a = encrypt_message_a(
+            plaintext.clone(),
+            reply_keypair.public_key(),
+            receiver_keypair.public_key(),
+        )
+        .expect("encryption should work");
 
         let decrypted = decrypt_message_a(&message_a, receiver_keypair.secret_key().clone())
             .expect("decryption should work");
@@ -336,7 +351,13 @@ mod test {
         );
 
         let mut corrupted_message_a = message_a.clone();
-        corrupted_message_a[3] += 1;
+        corrupted_message_a[3] ^= 1; // corrupt dhkem
+        assert_eq!(
+            decrypt_message_a(&corrupted_message_a, receiver_keypair.secret_key().clone()),
+            Err(HpkeError::Hpke(hpke::HpkeError::OpenError))
+        );
+        let mut corrupted_message_a = message_a.clone();
+        corrupted_message_a[PADDED_MESSAGE_BYTES - 3] ^= 1; // corrupt aead ciphertext
         assert_eq!(
             decrypt_message_a(&corrupted_message_a, receiver_keypair.secret_key().clone()),
             Err(HpkeError::Hpke(hpke::HpkeError::OpenError))
@@ -359,8 +380,6 @@ mod test {
     #[test]
     fn message_b_round_trip() {
         let mut plaintext = "foo".as_bytes().to_vec();
-        plaintext.resize(PADDED_PLAINTEXT_B_LENGTH, 0);
-        plaintext[PADDED_PLAINTEXT_B_LENGTH - 1] = 42;
 
         let reply_keypair = HpkeKeyPair::gen_keypair();
         let receiver_keypair = HpkeKeyPair::gen_keypair();
@@ -378,6 +397,24 @@ mod test {
         )
         .expect("decryption should work");
 
+        assert_eq!(decrypted.len(), PADDED_PLAINTEXT_B_LENGTH);
+        // decrypted plaintext is padded, so pad the expected plaintext
+        plaintext.resize(PADDED_PLAINTEXT_B_LENGTH, 0);
+        assert_eq!(decrypted, plaintext.to_vec());
+
+        plaintext[PADDED_PLAINTEXT_B_LENGTH - 1] = 42;
+        let message_b =
+            encrypt_message_b(plaintext.clone(), &receiver_keypair, reply_keypair.public_key())
+                .expect("encryption should work");
+
+        assert_eq!(message_b.len(), PADDED_MESSAGE_BYTES);
+
+        let decrypted = decrypt_message_b(
+            &message_b,
+            receiver_keypair.public_key().clone(),
+            reply_keypair.secret_key().clone(),
+        )
+        .expect("decryption should work");
         assert_eq!(decrypted.len(), plaintext.len());
         assert_eq!(decrypted, plaintext.to_vec());
 
@@ -400,7 +437,17 @@ mod test {
         );
 
         let mut corrupted_message_b = message_b.clone();
-        corrupted_message_b[3] += 1;
+        corrupted_message_b[3] ^= 1; // corrupt dhkem
+        assert_eq!(
+            decrypt_message_b(
+                &corrupted_message_b,
+                receiver_keypair.public_key().clone(),
+                reply_keypair.secret_key().clone()
+            ),
+            Err(HpkeError::Hpke(hpke::HpkeError::OpenError))
+        );
+        let mut corrupted_message_b = message_b.clone();
+        corrupted_message_b[PADDED_MESSAGE_BYTES - 3] ^= 1; // corrupt aead ciphertext
         assert_eq!(
             decrypt_message_b(
                 &corrupted_message_b,
