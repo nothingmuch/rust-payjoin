@@ -278,6 +278,8 @@ mod integration {
                     .with_expiry(Duration::from_secs(0))
                     .build()
                     .save(&recv_noop_persister)?;
+                // ensure that second-resolution clock has elapsed
+                tokio::time::sleep(Duration::from_secs(1)).await;
                 match expired_receiver.create_poll_request(&ohttp_relay) {
                     // Internal error types are private, so check against a string
                     Err(err) => assert!(err.to_string().contains("expired")),
