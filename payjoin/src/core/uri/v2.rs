@@ -1,27 +1,13 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use bitcoin::absolute::Time;
 use bitcoin::bech32::Hrp;
-use bitcoin::consensus::encode::Decodable;
-use bitcoin::consensus::Encodable;
 use url::Url;
 
 use crate::hpke::HpkePublicKey;
 use crate::ohttp::OhttpKeys;
+use crate::time::{ParseTimeError, Time};
 use crate::uri::ShortId;
-
-/// Get the current time as Unix seconds (u32).
-pub(crate) fn now_as_unix_seconds() -> u32 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
-        as u32
-}
-
-/// Get the current time as a bitcoin::absolute::Time with second precision.
-pub(crate) fn now() -> Time {
-    Time::from_consensus(now_as_unix_seconds())
-        .expect("Current time should always be a valid timestamp")
-}
 
 /// Retrieve the receiver's public key from the URL fragment
 fn receiver_pubkey(url: &Url) -> Result<HpkePublicKey, ParseReceiverPubkeyParamError> {
@@ -76,25 +62,14 @@ fn exp(url: &Url) -> Result<Time, ParseExpParamError> {
         return Err(ParseExpParamError::InvalidHrp(hrp));
     }
 
-    let seconds = u32::consensus_decode(&mut &bytes[..]).map_err(ParseExpParamError::InvalidExp)?;
-    Time::from_consensus(seconds).map_err(|_| {
-        ParseExpParamError::InvalidExp(bitcoin::consensus::encode::Error::Io(
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid timestamp: out of range")
-                .into(),
-        ))
-    })
+    Time::from_bytes(&bytes).map_err(ParseExpParamError::InvalidExp)
 }
 
 /// Set the exp parameter in the URL fragment
 fn set_exp(url: &mut Url, exp: &Time) {
-    let t = exp.to_consensus_u32();
-
-    let mut buf = [0u8; 4];
-    t.consensus_encode(&mut &mut buf[..]).unwrap(); // TODO no unwrap
-
     let ex_hrp: Hrp = Hrp::parse("EX").unwrap();
 
-    let exp_str = crate::bech32::nochecksum::encode(ex_hrp, &buf)
+    let exp_str = crate::bech32::nochecksum::encode(ex_hrp, &exp.to_bytes())
         .expect("encoding u32 timestamp should never fail");
 
     set_param(url, &exp_str)
@@ -333,7 +308,7 @@ pub(crate) enum ParseExpParamError {
     MissingExp,
     InvalidHrp(bitcoin::bech32::Hrp),
     DecodeBech32(bitcoin::bech32::primitives::decode::CheckedHrpstringError),
-    InvalidExp(bitcoin::consensus::encode::Error),
+    InvalidExp(ParseTimeError),
     InvalidFragment(ParseFragmentError),
 }
 
@@ -446,7 +421,13 @@ mod tests {
     fn test_exp_get_set() {
         let mut url = EXAMPLE_URL.clone();
 
-        let exp_time = Time::from_consensus(1720547781).expect("Valid timestamp");
+        let exp_time = Time::try_from(
+            std::time::SystemTime::UNIX_EPOCH
+                .checked_add(std::time::Duration::from_secs(1720547781))
+                .unwrap(),
+        )
+        .expect("invalid timestamp");
+
         set_exp(&mut url, &exp_time);
         assert_eq!(url.fragment(), Some("EX1C4UC6ES"));
 

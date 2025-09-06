@@ -1,4 +1,3 @@
-use bitcoin::absolute::Time;
 use serde::{Deserialize, Serialize};
 
 use super::{ReceiveSession, SessionContext};
@@ -6,6 +5,7 @@ use crate::output_substitution::OutputSubstitution;
 use crate::persist::SessionPersister;
 use crate::receive::v2::{extract_err_req, SessionError};
 use crate::receive::{common, JsonReply, OriginalPayload, PsbtContext};
+use crate::time::Time;
 use crate::{ImplementationError, IntoUrl, PjUri, Request};
 
 /// Errors that can occur when replaying a receiver event log
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_replaying_unchecked_proposal_expiry() {
-        let now = crate::uri::v2::now();
+        let now = crate::time::Time::now();
         let session_context = SessionContext { expiry: now, ..SHARED_CONTEXT.clone() };
         let original = original_from_test_vector();
         let reply_key = Some(crate::HpkeKeyPair::gen_keypair().1);

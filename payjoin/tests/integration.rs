@@ -7,6 +7,7 @@ mod integration {
     use bitcoin::{Amount, FeeRate, OutPoint, TxIn, TxOut, Weight};
     use payjoin::receive::v1::build_v1_pj_uri;
     use payjoin::receive::InputPair;
+    use payjoin::time::Time;
     use payjoin::{ImplementationError, OutputSubstitution, PjUri, Request, Uri};
     use payjoin_test_utils::corepc_node::vtype::ListUnspentItem;
     use payjoin_test_utils::corepc_node::AddressType;
@@ -190,7 +191,6 @@ mod integration {
     #[cfg(all(feature = "io", feature = "v2", feature = "v1", feature = "_manual-tls"))]
     mod v2 {
         use std::sync::Arc;
-        use std::time::Duration;
 
         use bitcoin::Address;
         use http::StatusCode;
@@ -274,12 +274,16 @@ mod integration {
                 // Inside the Receiver:
                 let address = receiver.new_address()?;
                 // test session with expiry in the past
+                let expiry = Time::try_from(
+                    std::time::SystemTime::now()
+                        .checked_sub(std::time::Duration::from_secs(1))
+                        .expect("time in the past should be representable"),
+                )
+                .expect("time in the past should be representable");
                 let mut expired_receiver = ReceiverBuilder::new(address, directory, ohttp_keys)?
-                    .with_expiry(Duration::from_secs(0))
+                    .with_expiry(expiry)
                     .build()
                     .save(&recv_noop_persister)?;
-                // ensure that second-resolution clock has elapsed
-                tokio::time::sleep(Duration::from_secs(1)).await;
                 match expired_receiver.create_poll_request(&ohttp_relay) {
                     // Internal error types are private, so check against a string
                     Err(err) => assert!(err.to_string().contains("expired")),

@@ -99,7 +99,6 @@ pub enum SessionEvent {
 
 #[cfg(test)]
 mod tests {
-    use bitcoin::absolute::Time;
     use bitcoin::{FeeRate, ScriptBuf};
     use payjoin_test_utils::{KEM, KEY_ID, PARSED_ORIGINAL_PSBT, SYMMETRIC};
 
@@ -110,6 +109,7 @@ mod tests {
     use crate::send::v1::SenderBuilder;
     use crate::send::v2::Sender;
     use crate::send::PsbtContext;
+    use crate::time::Time;
     use crate::{HpkeKeyPair, Uri, UriExt};
 
     const PJ_URI: &str =
@@ -120,8 +120,8 @@ mod tests {
         let keypair = HpkeKeyPair::gen_keypair();
         let id = crate::uri::ShortId::try_from(&b"12345670"[..]).expect("valid short id");
         let endpoint = url::Url::parse("http://localhost:1234").expect("valid url");
-        let now_seconds = crate::uri::v2::now_as_unix_seconds();
-        let expiry = Time::from_consensus(now_seconds + 60).expect("Valid timestamp");
+        let expiry =
+            Time::from_now(std::time::Duration::from_secs(60)).expect("expiry should be valid");
         let pj_param = crate::uri::v2::PjParam::new(
             endpoint,
             id,
@@ -212,8 +212,7 @@ mod tests {
         let endpoint = sender.endpoint().clone();
         let fallback_tx = sender.psbt_ctx.original_psbt.clone().extract_tx_unchecked_fee_rate();
         let id = crate::uri::ShortId::try_from(&b"12345670"[..]).expect("valid short id");
-        let now_seconds = crate::uri::v2::now_as_unix_seconds();
-        let expiry = Time::from_consensus(now_seconds + 60).expect("Valid timestamp");
+        let expiry = Time::from_now(std::time::Duration::from_secs(60)).expect("Valid expiry");
         let pj_param = crate::uri::v2::PjParam::new(
             endpoint,
             id,

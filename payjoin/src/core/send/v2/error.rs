@@ -1,8 +1,7 @@
 use core::fmt;
 
-use bitcoin::absolute::Time;
-
 use crate::ohttp::DirectoryResponseError;
+use crate::time::Time;
 
 /// Error returned when request could not be created.
 ///

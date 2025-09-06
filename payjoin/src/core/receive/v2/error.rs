@@ -1,12 +1,11 @@
 use core::fmt;
 use std::error;
 
-use bitcoin::absolute::Time;
-
 use crate::hpke::HpkeError;
 use crate::ohttp::{DirectoryResponseError, OhttpEncapsulationError};
 use crate::receive::error::Error;
 use crate::receive::ProtocolError;
+use crate::time::Time;
 
 /// Error that may occur during a v2 session typestate change
 ///
